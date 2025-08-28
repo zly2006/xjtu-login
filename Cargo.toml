@@ -1,7 +1,7 @@
 [package]
 name = "xjtu-login"
 description = "A tool for logging into XJTU network."
-version = "0.0.1-alpha.1"
+version = "0.0.1-alpha.2"
 edition = "2024"
 license = "GPL-3.0"
 repository = "https://github.com/zly2006/xjtu-login"
