@@ -1,0 +1,23 @@
+root:
+  level: debug
+  appenders:
+    - console
+
+# 指定名为 console 的 appender
+appenders:
+  console:
+    kind: console
+    encoder:
+      # 使用 PatternEncoder 来定义日志格式
+      kind: pattern
+      pattern: "{d(%Y-%m-%d %H:%M:%S)} {h({l})} {m}{n}"
+
+# 定义特定的 logger，用于覆盖默认设置
+loggers:
+  # 此配置会过滤掉 html5ever::tree_builder 模块的所有日志
+  html5ever:
+    level: off
+  selectors::matching:
+    level: info
+  cookie_store::cookie_store:
+    level: info
