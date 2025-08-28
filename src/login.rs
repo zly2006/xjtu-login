@@ -1,5 +1,6 @@
+use base64::Engine;
 use reqwest::StatusCode;
-use reqwest::blocking::{Client, Response};
+use reqwest::{Client, Response};
 use rsa::pkcs8::DecodePublicKey;
 use rsa::rand_core::OsRng;
 use rsa::{Pkcs1v15Encrypt, RsaPublicKey};
@@ -22,6 +23,7 @@ impl Display for Service {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Error)]
 pub enum LoginError {
     #[error("HTTP request error: {0}")]
@@ -52,7 +54,7 @@ pub fn truncate_string(s: &str, max_len: usize) -> String {
     }
 }
 
-pub fn login(service: Service, username: &str, password: &str) -> Result<Client, LoginError> {
+pub async fn login(service: Service, username: &str, password: &str) -> Result<Client, LoginError> {
     let client = Client::builder()
         .no_proxy() // 禁用 proxy，防止梯子故障。对于校外用户，我们转而使用webvpn登陆
         .cookie_store(true)
@@ -67,8 +69,10 @@ pub fn login(service: Service, username: &str, password: &str) -> Result<Client,
                 .post("https://ai.xjtu.edu.cn/api/auth/login")
                 .json(&serde_json::json!(  {"SSO":"Oauth","IdpID":"1","RedirectUrl":"/"}))
                 .send()
+                .await
                 .map_err(LoginError::RequestError)?
                 .json()
+                .await
                 .map_err(LoginError::RequestError)?;
             if let serde_json::Value::Object(obj) = &login_start {
                 if let Some(serde_json::Value::String(url)) = obj.get("redirect_uri") {
@@ -88,13 +92,22 @@ pub fn login(service: Service, username: &str, password: &str) -> Result<Client,
         }
     };
 
-    fn follow_redirects(
-        client: &reqwest::blocking::Client,
+    async fn follow_redirects(
+        client: &Client,
         url: &str,
+        stop_condition: Option<&dyn Fn(&Response) -> bool>,
     ) -> Result<Response, LoginError> {
         let mut url = url.to_string();
         for _ in 0..10 {
-            let resp = client.get(&url).send().map_err(LoginError::RequestError)?;
+            let resp = client.get(&url).send()
+                .await
+                .map_err(LoginError::RequestError)?;
+            if let Some(stop_condition) = stop_condition {
+                // 首先检查是否已经符合要求
+                if stop_condition(&resp) {
+                    return Ok(resp);
+                }
+            }
             if resp.status() == StatusCode::FOUND {
                 if let Some(location) = resp.headers().get("Location") {
                     let location = location
@@ -112,10 +125,12 @@ pub fn login(service: Service, username: &str, password: &str) -> Result<Client,
         Err(LoginError::Other("Too many redirects".to_string()))
     }
 
-    let resp = follow_redirects(&client, &login_url)?;
+    let resp = follow_redirects(&client, &login_url, None).await?;
     let post_endpoint = resp.url().to_string();
     log::info!("Login POST endpoint: {}", post_endpoint);
-    let html = resp.text().unwrap();
+    let html = resp.text()
+        .await
+        .unwrap();
     let document = Html::parse_document(&html);
 
     // 2. 创建一个 CSS 选择器来查找元素
@@ -156,9 +171,10 @@ pub fn login(service: Service, username: &str, password: &str) -> Result<Client,
 
     // encrypt password
     let public_key = RsaPublicKey::from_public_key_pem(include_str!("XJTU_PublicKey")).unwrap();
+    let base64engine = base64::engine::general_purpose::STANDARD;
     let password_encrypted = format!(
         "__RSA__{}",
-        base64::encode(
+        base64engine.encode(
             public_key
                 .encrypt(&mut OsRng, Pkcs1v15Encrypt, password.as_bytes())
                 .expect("加密失败")
@@ -174,9 +190,10 @@ pub fn login(service: Service, username: &str, password: &str) -> Result<Client,
             ("fpVisitorId", fp_visitor_id),
         ])
         .send()
+        .await
         .map_err(LoginError::RequestError)?;
     log::info!("Detecting MFA, status: {}", resp.status());
-    let mfa_state = if let Ok(json) = resp.json() {
+    let mfa_state = if let Ok(json) = resp.json().await {
         if let serde_json::Value::Object(obj) = json {
             if let Some(serde_json::Value::Object(data)) = obj.get("data") {
                 if let Some(serde_json::Value::String(mfa_state)) = data.get("state") {
@@ -216,6 +233,7 @@ pub fn login(service: Service, username: &str, password: &str) -> Result<Client,
             ("mfaState", &mfa_state),
         ])
         .send()
+        .await
         .map_err(LoginError::RequestError)?;
     fn expect_redirect(resp: &Response) -> Result<&str, LoginError> {
         if resp.status() != StatusCode::FOUND {
@@ -237,26 +255,25 @@ pub fn login(service: Service, username: &str, password: &str) -> Result<Client,
         log::debug!("Redirect to: {}", location);
         Ok(location)
     }
-    let resp = client
-        .get(expect_redirect(&resp)?)
-        .send()
-        .map_err(LoginError::RequestError)?;
-    let resp = client
-        .get(expect_redirect(&resp)?)
-        .send()
-        .map_err(LoginError::RequestError)?;
-    let resp = client
-        .get(expect_redirect(&resp)?)
-        .send()
-        .map_err(LoginError::RequestError)?;
-    let resp = client
-        .get(expect_redirect(&resp)?)
-        .send()
-        .map_err(LoginError::RequestError)?;
-    let url = expect_redirect(&resp)?;
-    if !url.starts_with("/login-success") {
-        return Err(LoginError::LoginFailed);
+    match service {
+        Service::AiPlatform => {
+            let resp = follow_redirects(
+                &client,
+                expect_redirect(&resp)?,
+                Some(&|r| {
+                    r.status() != StatusCode::FOUND // not 302
+                || r.headers().get("Location") // success
+                        .and_then( |loc| loc.to_str()
+                        .ok().map(|s| s.starts_with("/login-success"))).unwrap_or(false)
+                }),
+            ).await?;
+            if resp.status() != StatusCode::FOUND {
+                return Err(LoginError::ExpectedRedirect(
+                    resp.url().as_str().to_string(),
+                    resp.status(),
+                ));
+            }
+        }
     }
-
     Ok(client)
 }

@@ -1,7 +1,7 @@
 [package]
 name = "xjtu-login"
 description = "A tool for logging into XJTU network."
-version = "0.0.1-alpha.2"
+version = "0.0.1-alpha.3"
 edition = "2024"
 license = "GPL-3.0"
 repository = "https://github.com/zly2006/xjtu-login"
@@ -9,7 +9,7 @@ repository = "https://github.com/zly2006/xjtu-login"
 [dependencies]
 rsa = "0.9.8"
 reqwest = { version = "0.12.23", features = ["blocking", "json", "cookies"] }
-uuid = "1.18.0"
+tokio = { version = "1.47.1", features = ["rt", "rt-multi-thread", "macros"] }
 base64 = "0.22.1"
 log = "0.4.27"
 thiserror = "2.0.16"
