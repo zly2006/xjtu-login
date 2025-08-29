@@ -1,11 +1,13 @@
 use base64::Engine;
 use reqwest::StatusCode;
+use reqwest::cookie::Jar;
 use reqwest::{Client, Response};
 use rsa::pkcs8::DecodePublicKey;
 use rsa::rand_core::OsRng;
 use rsa::{Pkcs1v15Encrypt, RsaPublicKey};
 use scraper::{Html, Selector};
 use std::fmt::Display;
+use std::sync::Arc;
 use thiserror::Error;
 
 pub static BROWSER_UA: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36";
@@ -36,7 +38,6 @@ pub enum LoginError {
     LoginFailed,
     #[error("Other error: {0}")]
     Other(String),
-    // Add other error types as needed
 }
 
 /**
@@ -54,10 +55,21 @@ pub fn truncate_string(s: &str, max_len: usize) -> String {
     }
 }
 
-pub async fn login(service: Service, username: &str, password: &str) -> Result<Client, LoginError> {
+pub struct LoginSuccess {
+    pub client: Client,
+    pub cookie_jar: Arc<Jar>,
+}
+
+pub async fn login(
+    service: Service,
+    username: &str,
+    password: &str,
+) -> Result<LoginSuccess, LoginError> {
+    let cookie_jar = Arc::new(Jar::default());
     let client = Client::builder()
         .no_proxy() // 禁用 proxy，防止梯子故障。对于校外用户，我们转而使用webvpn登陆
         .cookie_store(true)
+        .cookie_provider(cookie_jar.clone())
         .redirect(reqwest::redirect::Policy::none())
         .user_agent(BROWSER_UA)
         .build()
@@ -99,7 +111,9 @@ pub async fn login(service: Service, username: &str, password: &str) -> Result<C
     ) -> Result<Response, LoginError> {
         let mut url = url.to_string();
         for _ in 0..10 {
-            let resp = client.get(&url).send()
+            let resp = client
+                .get(&url)
+                .send()
                 .await
                 .map_err(LoginError::RequestError)?;
             if let Some(stop_condition) = stop_condition {
@@ -128,9 +142,7 @@ pub async fn login(service: Service, username: &str, password: &str) -> Result<C
     let resp = follow_redirects(&client, &login_url, None).await?;
     let post_endpoint = resp.url().to_string();
     log::info!("Login POST endpoint: {}", post_endpoint);
-    let html = resp.text()
-        .await
-        .unwrap();
+    let html = resp.text().await.unwrap();
     let document = Html::parse_document(&html);
 
     // 2. 创建一个 CSS 选择器来查找元素
@@ -266,7 +278,8 @@ pub async fn login(service: Service, username: &str, password: &str) -> Result<C
                         .and_then( |loc| loc.to_str()
                         .ok().map(|s| s.starts_with("/login-success"))).unwrap_or(false)
                 }),
-            ).await?;
+            )
+            .await?;
             if resp.status() != StatusCode::FOUND {
                 return Err(LoginError::ExpectedRedirect(
                     resp.url().as_str().to_string(),
@@ -275,5 +288,5 @@ pub async fn login(service: Service, username: &str, password: &str) -> Result<C
             }
         }
     }
-    Ok(client)
+    Ok(LoginSuccess { client, cookie_jar })
 }
