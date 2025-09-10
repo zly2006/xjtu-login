@@ -15,12 +15,14 @@ pub static BROWSER_UA: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) A
 #[derive(Debug)]
 pub enum Service {
     AiPlatform,
+    CourseSelection,
 }
 
 impl Display for Service {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Service::AiPlatform => write!(f, "AI 平台"),
+            Service::CourseSelection => write!(f, "选课系统"),
         }
     }
 }
@@ -58,6 +60,70 @@ pub fn truncate_string(s: &str, max_len: usize) -> String {
 pub struct LoginSuccess {
     pub client: Client,
     pub cookie_jar: Arc<Jar>,
+}
+
+pub struct Session {
+    pub client: Option<Client>,
+    pub cookie_jar: Arc<Jar>,
+}
+
+impl Session {
+    pub fn new() -> Self {
+        Self {
+            client: None,
+            cookie_jar: Arc::new(Jar::default()),
+        }
+    }
+
+    pub fn default_client() -> Self {
+        let client = Client::builder()
+            .no_proxy() // 禁用 proxy，防止梯子故障。对于校外用户，我们转而使用webvpn登陆
+            .cookie_store(true)
+            .cookie_provider(Arc::new(Jar::default()))
+            .redirect(reqwest::redirect::Policy::none())
+            .user_agent(BROWSER_UA)
+            .build()
+            .unwrap();
+        Self {
+            client: Some(client),
+            cookie_jar: Arc::new(Jar::default()),
+        }
+    }
+}
+
+async fn follow_redirects(
+    client: &Client,
+    url: &str,
+    stop_condition: Option<&dyn Fn(&Response) -> bool>,
+) -> Result<Response, LoginError> {
+    let mut url = url.to_string();
+    for _ in 0..10 {
+        let resp = client
+            .get(&url)
+            .send()
+            .await
+            .map_err(LoginError::RequestError)?;
+        if let Some(stop_condition) = stop_condition {
+            // 首先检查是否已经符合要求
+            if stop_condition(&resp) {
+                return Ok(resp);
+            }
+        }
+        if resp.status() == StatusCode::MOVED_PERMANENTLY || resp.status() == StatusCode::FOUND {
+            if let Some(location) = resp.headers().get("Location") {
+                let location = location
+                    .to_str()
+                    .map_err(|_| LoginError::ExpectedRedirect(url.clone(), resp.status()))?;
+                log::debug!("Redirect to: {}", location);
+                url = location.to_string();
+            } else {
+                return Err(LoginError::ExpectedRedirect(url.clone(), resp.status()));
+            }
+        } else {
+            return Ok(resp);
+        }
+    }
+    Err(LoginError::Other("Too many redirects".to_string()))
 }
 
 pub async fn login(
@@ -102,42 +168,15 @@ pub async fn login(
                 )));
             }
         }
+        Service::CourseSelection => follow_redirects(
+            &client,
+            "https://xkfw.xjtu.edu.cn/xsxkapp/sys/xsxkapp/*default/index.do",
+            None,
+        )
+        .await?
+        .url()
+        .to_string(),
     };
-
-    async fn follow_redirects(
-        client: &Client,
-        url: &str,
-        stop_condition: Option<&dyn Fn(&Response) -> bool>,
-    ) -> Result<Response, LoginError> {
-        let mut url = url.to_string();
-        for _ in 0..10 {
-            let resp = client
-                .get(&url)
-                .send()
-                .await
-                .map_err(LoginError::RequestError)?;
-            if let Some(stop_condition) = stop_condition {
-                // 首先检查是否已经符合要求
-                if stop_condition(&resp) {
-                    return Ok(resp);
-                }
-            }
-            if resp.status() == StatusCode::FOUND {
-                if let Some(location) = resp.headers().get("Location") {
-                    let location = location
-                        .to_str()
-                        .map_err(|_| LoginError::ExpectedRedirect(url.clone(), resp.status()))?;
-                    log::debug!("Redirect to: {}", location);
-                    url = location.to_string();
-                } else {
-                    return Err(LoginError::ExpectedRedirect(url.clone(), resp.status()));
-                }
-            } else {
-                return Ok(resp);
-            }
-        }
-        Err(LoginError::Other("Too many redirects".to_string()))
-    }
 
     let resp = follow_redirects(&client, &login_url, None).await?;
     let post_endpoint = resp.url().to_string();
@@ -285,6 +324,17 @@ pub async fn login(
                     resp.url().as_str().to_string(),
                     resp.status(),
                 ));
+            }
+        }
+        Service::CourseSelection => {
+            println!("resp status: {}", resp.status());
+            let resp = follow_redirects(&client, expect_redirect(&resp)?, None).await?;
+            if resp.status() != StatusCode::OK {
+                panic!(
+                    "Unexpected status code: {} on {}",
+                    resp.status(),
+                    resp.url()
+                );
             }
         }
     }
