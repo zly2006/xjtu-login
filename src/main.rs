@@ -1,6 +1,6 @@
+use crate::login::Service;
 use std::time::Duration;
 use tokio::time::sleep;
-use crate::login::Service;
 use xjtu_login::course::get_batch_list;
 
 mod login;
@@ -22,24 +22,32 @@ async fn main() {
     let batch = get_batch_list(&session.client)
         .await
         .unwrap()
-        .into_iter()
-        .skip(1)
-        .next()
+        .into_iter().nth(1)
         .unwrap();
-    session
+    let courses = session
         .list_course(&batch, xjtu_login::course::CourseType::TJKC, 0, "国际结算")
         .await;
     session
-        .delete_volunteer(&batch, "202520261FINA52091901")
+        .delete_volunteer(&batch, &courses[0].tc_list[0].teaching_class_id)
         .await;
     sleep(Duration::from_secs_f32(0.3)).await;
-    println!("{}", session.get_capacity("202520261FINA52091901").await);
+    println!(
+        "{}",
+        session
+            .get_capacity(&courses[0].tc_list[0].teaching_class_id)
+            .await
+    );
     session
         .add_volunteer(
             &batch,
-            "202520261FINA52091901",
+            &courses[0].tc_list[0].teaching_class_id,
             xjtu_login::course::CourseType::TJKC,
         )
         .await;
-    println!("{}", session.get_capacity("202520261FINA52091901").await);
+    println!(
+        "{}",
+        session
+            .get_capacity(&courses[0].tc_list[0].teaching_class_id)
+            .await
+    );
 }

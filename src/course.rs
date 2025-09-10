@@ -193,7 +193,10 @@ pub struct TeachingClass {
     #[serde(rename = "isFull", deserialize_with = "deserialize_bool_from_string")]
     pub is_full: bool,
     /// 是否与已选课程时间冲突
-    #[serde(rename = "isConflict", deserialize_with = "deserialize_bool_from_string")]
+    #[serde(
+        rename = "isConflict",
+        deserialize_with = "deserialize_bool_from_string"
+    )]
     pub is_conflict: bool,
 }
 
@@ -259,9 +262,15 @@ impl CourseSession {
         let courses = resp["dataList"].clone();
         let courses: Vec<CourseInfo> = serde_json::from_value(courses).unwrap();
         for course in &courses {
-            println!("{} - {} - {}", course.course_number, course.course_name, if course.selected { "已选" } else { "未选" });
+            println!(
+                "{} - {} - {}",
+                course.course_number,
+                course.course_name,
+                if course.selected { "已选" } else { "未选" }
+            );
             for tc in &course.tc_list {
-                println!("  {} - {} - {} - {}/{} - {}",
+                println!(
+                    "  {} - {} - {} - {}/{} - {}",
                     tc.teaching_class_id,
                     tc.teacher_name,
                     tc.teaching_place,
@@ -300,7 +309,7 @@ impl CourseSession {
             .json::<serde_json::Value>()
             .await
             .unwrap();
-        println!("{}", resp);
+        println!("{resp}");
     }
 
     /// 添加选课志愿
@@ -339,7 +348,7 @@ impl CourseSession {
             .json::<serde_json::Value>()
             .await
             .unwrap();
-        println!("{}", resp);
+        println!("{resp}");
     }
 
     /// 获取教学班容量详细信息

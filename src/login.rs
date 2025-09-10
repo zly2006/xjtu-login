@@ -67,6 +67,12 @@ pub struct Session {
     pub cookie_jar: Arc<Jar>,
 }
 
+impl Default for Session {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Session {
     pub fn new() -> Self {
         Self {
@@ -114,7 +120,7 @@ async fn follow_redirects(
                 let location = location
                     .to_str()
                     .map_err(|_| LoginError::ExpectedRedirect(url.clone(), resp.status()))?;
-                log::debug!("Redirect to: {}", location);
+                log::debug!("Redirect to: {location}");
                 url = location.to_string();
             } else {
                 return Err(LoginError::ExpectedRedirect(url.clone(), resp.status()));
@@ -140,7 +146,7 @@ pub async fn login(
         .user_agent(BROWSER_UA)
         .build()
         .map_err(LoginError::RequestError)?;
-    log::info!("Logging in to service: {}", service);
+    log::info!("Logging in to service: {service}");
     let login_url = match service {
         Service::AiPlatform => {
             let login_start: serde_json::Value = client
@@ -157,14 +163,12 @@ pub async fn login(
                     url.clone()
                 } else {
                     return Err(LoginError::Other(format!(
-                        "No url found in login start response: {}",
-                        login_start
+                        "No url found in login start response: {login_start}"
                     )));
                 }
             } else {
                 return Err(LoginError::Other(format!(
-                    "Unexpected login start response: {}",
-                    login_start
+                    "Unexpected login start response: {login_start}"
                 )));
             }
         }
@@ -180,7 +184,7 @@ pub async fn login(
 
     let resp = follow_redirects(&client, &login_url, None).await?;
     let post_endpoint = resp.url().to_string();
-    log::info!("Login POST endpoint: {}", post_endpoint);
+    log::info!("Login POST endpoint: {post_endpoint}");
     let html = resp.text().await.unwrap();
     let document = Html::parse_document(&html);
 
@@ -303,7 +307,7 @@ pub async fn login(
             .map_err(|_| {
                 LoginError::ExpectedRedirect(resp.url().as_str().to_string(), resp.status())
             })?;
-        log::debug!("Redirect to: {}", location);
+        log::debug!("Redirect to: {location}");
         Ok(location)
     }
     match service {
