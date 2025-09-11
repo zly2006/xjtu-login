@@ -365,36 +365,21 @@ impl CourseSession {
             .json::<serde_json::Value>()
             .await
             .unwrap();
-        let number_of_male: u32 = resp["data"]["numberOfMale"]
-            .as_str()
-            .unwrap()
-            .parse()
-            .unwrap();
-        let capacity_of_male: u32 = resp["data"]["capacityOfMale"]
-            .as_str()
-            .unwrap()
-            .parse()
-            .unwrap();
-        let number_of_female: u32 = resp["data"]["numberOfFemale"]
-            .as_str()
-            .unwrap()
-            .parse()
-            .unwrap();
-        let capacity_of_female: u32 = resp["data"]["capacityOfFemale"]
-            .as_str()
-            .unwrap()
-            .parse()
-            .unwrap();
-        let number_of_selected: u32 = resp["data"]["numberOfSelected"]
-            .as_str()
-            .unwrap()
-            .parse()
-            .unwrap();
-        let class_capacity: u32 = resp["data"]["classCapacity"]
-            .as_str()
-            .unwrap()
-            .parse()
-            .unwrap();
+        macro_rules! get_int_field {
+            ($field:expr) => {
+                resp["data"][$field]
+                    .as_str()
+                    .unwrap()
+                    .parse::<u32>()
+                    .unwrap()
+            };
+        }
+        let number_of_male = get_int_field!("numberOfMale");
+        let capacity_of_male = get_int_field!("capacityOfMale");
+        let number_of_female = get_int_field!("numberOfFemale");
+        let capacity_of_female = get_int_field!("capacityOfFemale");
+        let number_of_selected = get_int_field!("numberOfSelected");
+        let class_capacity = get_int_field!("classCapacity");
         CapacityInfo {
             number_of_male,
             capacity_of_male,

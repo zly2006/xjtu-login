@@ -1,8 +1,9 @@
+use crate::course::get_batch_list;
 use crate::login::Service;
 use std::time::Duration;
 use tokio::time::sleep;
-use xjtu_login::course::get_batch_list;
 
+mod course;
 mod login;
 
 #[tokio::main]
@@ -16,16 +17,17 @@ async fn main() {
     )
     .await
     .expect("login failed");
-    let session = xjtu_login::course::CourseSession::fron_client(login.client)
+    let session = course::CourseSession::fron_client(login.client)
         .await
         .unwrap();
     let batch = get_batch_list(&session.client)
         .await
         .unwrap()
-        .into_iter().nth(1)
+        .into_iter()
+        .nth(1)
         .unwrap();
     let courses = session
-        .list_course(&batch, xjtu_login::course::CourseType::TJKC, 0, "国际结算")
+        .list_course(&batch, course::CourseType::TJKC, 0, "国际结算")
         .await;
     session
         .delete_volunteer(&batch, &courses[0].tc_list[0].teaching_class_id)
@@ -41,7 +43,7 @@ async fn main() {
         .add_volunteer(
             &batch,
             &courses[0].tc_list[0].teaching_class_id,
-            xjtu_login::course::CourseType::TJKC,
+            course::CourseType::TJKC,
         )
         .await;
     println!(
