@@ -123,10 +123,6 @@ pub enum CourseType {
     QXKC,
 }
 
-/*
-{"dataList":[{"departmentName":"经济与金融学院","courseNatureName":"选修","retakeType":null,"campusName":null,"selected":true,"tcList":[{"alternateStatus":null,"isCanAlternate":"0","capacityOfMale":"0","capacityOfFemale":"0","numberOfMale":"11","numberOfFemale":"4","extInfo":null,"conflictDesc":null,"hasTest":"0","testTeachingClassID":null,"isTest":"0","numberOfSelected":"16","limitGender":"0","isFull":"0","isConflict":"0","sportName":null,"courseIndex":"01","courseNatureName":null,"departmentName":null,"courseTypeName":null,"courseNumber":"FINA520919","teachingClassID":"202520261FINA52091901","classCapacity":"30","numberOfFirstVolunteer":"16","isChoose":"1","chooseVolunteer":null,"teacherName":"何建奎","teachingPlace":"1-16周 星期一 1-2节 主楼C-206,13-16周 星期四 7-8节 主楼C-206","teachingMethod":"面授讲课","capacitySuffix":"","recommendSchoolClass":"国贸2301","retakeType":null,"retakeTypeDetail":null,"courseUrl":null,"isLimitKind":"1","inQuene":null,"operationType":"1","courseFlag":null,"needBook":null,"hasBook":"0","campus":"1","campusName":"兴庆校区","teachCampus":"***"}],"courseNumber":"FINA520919","courseName":"国际结算","number":1,"type":"97","typeName":"专业选修课程","hours":"40","credit":"2.5","retakeTypeDetail":null,"courseUrl":null,"majorFlag":"主","courseFlag":null,"wid":null}],"totalCount":1,"keyExpired":null,"code":"1","msg":"查询数据成功","timestamp":"32","map":null}
-
- */
 /// 课程基本信息
 #[derive(Deserialize)]
 pub struct CourseInfo {
@@ -289,7 +285,7 @@ impl CourseSession {
     /// * `class_id` - 教学班ID
     pub async fn delete_volunteer(&self, batch: &Batch, class_id: &str) {
         let params = serde_json::json!({
-            "data":{
+            "data": {
                 "operationType": "2",
                 "studentCode": self.number,
                 "electiveBatchCode": batch.code,
@@ -319,7 +315,7 @@ impl CourseSession {
     /// * `course_type` - 课程类型
     pub async fn add_volunteer(&self, batch: &Batch, class_id: &str, course_type: CourseType) {
         let params = serde_json::json!({
-            "data":{
+            "data": {
                 "operationType": "1",
                 "studentCode": self.number,
                 "electiveBatchCode": batch.code,
